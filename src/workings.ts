@@ -64,6 +64,13 @@ interface ICallData {
   endTimestamp: number;
 }
 
+interface IResultData {
+  customerId: number;
+  date: string;
+  maxConcurrentCalls: number;
+  callIds: string[];
+  timestamp: number | null;
+}
 interface IDateInfo {
   customerId: number,
   date: string,
@@ -74,23 +81,53 @@ interface IDateInfo {
 function getConcurrentCalls(calls: ICallData[]) {
   const customerMap = createCustomerMap(calls);
   const customerAndDates = groupByDate(customerMap);
+
   const concurrentCallData = customerAndDates.map(day => {
     const concurrentCalls = calculateConcurrentTimestamps(day);
-    console.log(concurrentCalls)
+    return concurrentCalls;
   });
 
+  return concurrentCallData;
 }
 
 function calculateConcurrentTimestamps(dayData: IDateInfo) {
+  const callEvents: { timestamp: number; type: 'start' | 'end' }[] = [];
+
+  // Collect all start and end timestamps for that day
   dayData.calls.forEach(call => {
-    const concurrentCalls = dayData.calls.filter(c => {
-      return c.startTimestamp <= call.startTimestamp && c.endTimestamp >= call.endTimestamp;
-    });
-    if (concurrentCalls.length > dayData.maxConcurrentCalls) {
-      dayData.maxConcurrentCalls = concurrentCalls.length;
+    callEvents.push({ timestamp: call.startTimestamp, type: 'start' });
+    callEvents.push({ timestamp: call.endTimestamp, type: 'end' });
+  });
+
+  // Sort events by timestamp
+  callEvents.sort((a, b) => a.timestamp - b.timestamp);
+
+  let currentConcurrentCalls = 0;
+  let maxConcurrentCalls = 0;
+  let peakTimestamp: number | null = null;
+
+  callEvents.forEach(event => {
+    if (event.type === 'start') {
+      if (peakTimestamp === null) peakTimestamp = event.timestamp;
+      currentConcurrentCalls++;
+      if (currentConcurrentCalls > maxConcurrentCalls) {
+        maxConcurrentCalls = currentConcurrentCalls;
+        peakTimestamp = event.timestamp;
+      }
+    } else {
+      currentConcurrentCalls--;
     }
   });
-  return dayData;
+
+  const callIds = dayData.calls.map(call => call.callId);
+  const {calls, ...newObject} = {...dayData};
+
+  newObject.maxConcurrentCalls = maxConcurrentCalls;
+  (newObject as IResultData).timestamp = peakTimestamp;
+  (newObject as IResultData).callIds = callIds;
+
+
+  return newObject;
 }
 
 function groupByDate(customerMap: Map<number, ICallData[]>) {
@@ -103,28 +140,27 @@ function groupByDate(customerMap: Map<number, ICallData[]>) {
       const endDate = getDate(call.endTimestamp);
 
       if (dateMap.has(startDate)) {
-        if (!(dateMap.get(startDate).some((x: ICallData) => x.callId === call.callId))) {
-          dateMap.get(startDate).push(call);
-        }
+        dateMap.get(startDate).push(call);
       } else {
         dateMap.set(startDate, [call]);
       }
-      if (dateMap.has(endDate)) {
-        if (!(dateMap.get(endDate).some((x: ICallData) => x.callId === call.callId))) {
-          dateMap.get(startDate).push(call);
+
+      if (startDate !== endDate) {
+        if (dateMap.has(endDate)) {
+          dateMap.get(endDate).push(call);
+        } else {
+          dateMap.set(endDate, [call]);
         }
-      } else {
-        dateMap.set(endDate, [call]);
       }
-    })
+    });
 
     dateMap.forEach((calls, date) => {
       dateArray.push({
         customerId,
         date,
         maxConcurrentCalls: 0,
-        calls: [...calls]
-      })
+        calls: [...calls],
+      });
     });
   });
 
@@ -138,7 +174,6 @@ function getDate(timestamp: number) {
   const year = `${date.getFullYear()}`.padStart(2, '0');
 
   return `${year}-${month}-${day}`;
-
 }
 
 function createCustomerMap(callData: ICallData[]) {
@@ -148,10 +183,11 @@ function createCustomerMap(callData: ICallData[]) {
     if (customerMap.has(call.customerId)) {
       customerMap.get(call.customerId).push({ ...newCall });
     } else {
-      customerMap.set(call.customerId, [{...newCall}]);
+      customerMap.set(call.customerId, [{ ...newCall }]);
     }
   });
   return customerMap;
-};
+}
 
-getConcurrentCalls(callRecords);
+const concurrentCalls = getConcurrentCalls(callRecords);
+console.log(concurrentCalls);
