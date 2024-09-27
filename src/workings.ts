@@ -1,4 +1,4 @@
-const callRecords = [
+export const testData: ICallData[] = [
   {
     customerId: 123,
     callId: 'Jan1st_11:30pm_to_Jan1st_11:40pm_Call',
@@ -78,7 +78,7 @@ interface IDateInfo {
   maxConcurrentCalls: number,
 }
 
-function getConcurrentCalls(calls: ICallData[]) {
+export function getConcurrentCalls(calls: ICallData[]) {
   const customerMap = createCustomerMap(calls);
   const customerAndDates = groupByDate(customerMap);
 
@@ -93,13 +93,11 @@ function getConcurrentCalls(calls: ICallData[]) {
 function calculateConcurrentTimestamps(dayData: IDateInfo) {
   const callEvents: { timestamp: number; type: 'start' | 'end' }[] = [];
 
-  // Collect all start and end timestamps for that day
   dayData.calls.forEach(call => {
     callEvents.push({ timestamp: call.startTimestamp, type: 'start' });
     callEvents.push({ timestamp: call.endTimestamp, type: 'end' });
   });
 
-  // Sort events by timestamp
   callEvents.sort((a, b) => a.timestamp - b.timestamp);
 
   let currentConcurrentCalls = 0;
@@ -188,6 +186,3 @@ function createCustomerMap(callData: ICallData[]) {
   });
   return customerMap;
 }
-
-const concurrentCalls = getConcurrentCalls(callRecords);
-console.log(concurrentCalls);
